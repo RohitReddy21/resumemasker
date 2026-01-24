@@ -7,4 +7,5 @@ python-multipart
 PyPDF2
 python-docx
 requests
-python-dotenvreportlab
+python-dotenv
+reportlab
