@@ -195,8 +195,9 @@ async def get_candidates(jobId: Optional[str] = None):
 
 @app.post("/candidates", response_model=Candidate)
 async def create_candidate(candidate: Candidate):
+    """Create a new candidate - returns with _id for frontend to store"""
     try:
-        print(f"Creating candidate: {candidate.name}")
+        print(f"📝 Creating candidate: {candidate.name}")
         
         c_dict = candidate.dict()
         
@@ -208,16 +209,21 @@ async def create_candidate(candidate: Candidate):
         # Initialize status history
         c_dict["status_history"] = [{"status": candidate.current_status, "changedAt": datetime.utcnow()}]
         
-        print(f"Inserting candidate with ID: {candidate_id}")
+        print(f"🔍 Inserting candidate with ID: {candidate_id}")
         result = await db.candidates.insert_one(c_dict)
-        print(f"Insert result: {result.inserted_id}")
+        mongo_id = str(result.inserted_id)
+        print(f"✅ Successfully created candidate with MongoDB _id: {mongo_id}")
         
-        # Return the created candidate with proper ID
+        # Return the created candidate with BOTH id and _id
+        # This is CRITICAL: frontend must store _id to use in PATCH requests
         c_dict["id"] = candidate_id
+        c_dict["_id"] = mongo_id  # IMPORTANT: Return MongoDB ObjectId string for PATCH operations
+        
+        print(f"🎯 Returning candidate: {c_dict.get('name')} with id={candidate_id}, _id={mongo_id}")
         return c_dict
         
     except Exception as e:
-        print(f"Create candidate error: {str(e)}")
+        print(f"❌ Create candidate error: {str(e)}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to create candidate: {str(e)}")

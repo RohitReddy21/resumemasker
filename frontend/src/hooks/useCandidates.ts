@@ -147,19 +147,35 @@ export const useCreateCandidate = () => {
 
   return useMutation({
     mutationFn: async (input: CreateCandidateInput) => {
-      // Backend will generate and return the correct UUID
+      console.log('🎯 Creating new candidate:', input.name);
+      
+      // Step 1: POST to create the candidate
       const result = await candidateService.create(input as any);
       
-      // Ensure we return the candidate with the correct ID from backend
+      // Step 2: CRITICAL - Backend returns _id which MUST be stored for subsequent updates
+      if (!result._id && !result.id) {
+        throw new Error('❌ Candidate creation failed: no ID returned from backend');
+      }
+      
+      const savedId = result._id || result.id;
+      console.log(`✅ Candidate created with ID: ${savedId}`);
+      console.log('📌 IMPORTANT: Store this ID before any edits!');
+      
+      // Return the candidate with explicit ID
       return {
         ...result,
-        // Use the ID returned by backend (app-generated UUID)
-        id: result.id
+        id: savedId,
+        _id: result._id || savedId, // Ensure _id is always present
       };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('✅ Candidate saved successfully:', data);
+      // Invalidate list to refresh
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
       queryClient.invalidateQueries({ queryKey: ['metrics'] });
+    },
+    onError: (error) => {
+      console.error('❌ Failed to create candidate:', error);
     },
   });
 };
@@ -169,28 +185,34 @@ export const useUpdateCandidate = () => {
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<Candidate> }) => {
-      // Validate inputs
-      if (!id || typeof id !== 'string') {
-        throw new Error('Invalid candidate ID');
+      // CRITICAL VALIDATION: Candidate must be saved first
+      if (!id || typeof id !== 'string' || id.trim() === '') {
+        throw new Error('❌ Error: Candidate must be saved before updating. No ID found. Please create the candidate first.');
       }
+      
       if (!updates || Object.keys(updates).length === 0) {
         throw new Error('No updates provided');
       }
       
-      console.log(`Updating candidate ${id} with:`, updates);
+      console.log(`🔄 Updating candidate ${id} with:`, updates);
+      console.log('💾 Using ID from saved candidate record');
+      
       return await candidateService.update(id, updates);
     },
     onSuccess: (data, variables) => {
-      console.log('Update successful:', data);
+      console.log('✅ Update successful:', data);
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
+      queryClient.invalidateQueries({ queryKey: ['candidate', variables.id] });
       queryClient.invalidateQueries({ queryKey: ['metrics'] });
     },
     onError: (error: any, variables) => {
-      console.error('Update mutation failed:', error);
-      console.error('Variables:', variables);
+      console.error('❌ Update mutation failed:', error);
+      console.error('Attempted to update ID:', variables.id);
+      console.error('Error details:', error.message);
       
-      // Don't continue to delete if update failed
-      // Just let the error bubble up to the UI
+      if (error.message && error.message.includes('404')) {
+        console.error('⚠️ Candidate not found - ensure it was created first');
+      }
     },
   });
 };

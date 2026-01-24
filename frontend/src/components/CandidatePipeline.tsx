@@ -83,14 +83,34 @@ export function CandidatePipeline({ candidates, jobs, onStatusChange }: Candidat
 
   const handleInlineUpdate = async (id: string, field: string, value: string) => {
     try {
+      // CRITICAL: Validate candidate was saved before updating
+      if (!id || id.trim() === '') {
+        toast({
+          title: 'Error',
+          description: '❌ Candidate must be saved first before editing',
+          variant: 'destructive'
+        });
+        return;
+      }
+
       // Map frontend field to backend field
       const backendField = field === 'currentCtc' ? 'current_ctc' :
         field === 'expectedCtc' ? 'expected_ctc' : field;
 
+      console.log(`🔄 Updating field ${field} for candidate ${id}`);
       await updateCandidate.mutateAsync({ id, updates: { [backendField]: value } });
       setEditingCell(null);
+      toast({
+        title: 'Success',
+        description: `✅ Candidate updated successfully`,
+      });
     } catch (error) {
-      toast({ title: 'Error', description: 'Failed to update candidate', variant: 'destructive' });
+      console.error('Update error:', error);
+      toast({
+        title: 'Error',
+        description: '❌ Failed to update candidate. Make sure it was created first.',
+        variant: 'destructive'
+      });
     }
   };
 

@@ -142,8 +142,9 @@ export const AddCandidateDialog = ({ open, onOpenChange, jobs }: AddCandidateDia
                 }
             });
         } else {
-            // Create new candidate
-            await createCandidate.mutateAsync({
+            // Create new candidate - MUST SAVE FIRST before any updates
+            console.log('📝 Creating new candidate:', c.name);
+            const createdCandidate = await createCandidate.mutateAsync({
                 name: c.name,
                 email: c.email,
                 phone: c.phone || undefined,
@@ -164,6 +165,14 @@ export const AddCandidateDialog = ({ open, onOpenChange, jobs }: AddCandidateDia
                 masked_resume_text: c.maskedResumeText,
                 masked_name: c.maskedName,
             });
+            
+            // CRITICAL: Store the returned ID for future updates
+            if (createdCandidate && (createdCandidate._id || createdCandidate.id)) {
+                console.log('✅ Candidate saved with ID:', createdCandidate._id || createdCandidate.id);
+                console.log('📌 This ID can now be used for updates');
+            } else {
+                throw new Error('❌ Candidate created but no ID returned');
+            }
         }
 
         const updated = [...processedCandidates];
