@@ -189,7 +189,7 @@ export function CandidatePipeline({ candidates, jobs, onStatusChange }: Candidat
       id: candidate.id,
       updates: { 
         rating: newRating,
-        matchScore: score
+        match_score: score
       }
     }).then(() => {
       toast({

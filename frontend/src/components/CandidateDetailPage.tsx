@@ -37,7 +37,7 @@ export const CandidateDetailPage = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `Candidate_${candidate?.candidate_id || 'Unknown'}_Resume.pdf`;
+      link.download = `Candidate_${(candidate as any)?.candidate_id || 'Unknown'}_Resume.pdf`;
       document.body.appendChild(link);
       link.click();
       window.URL.revokeObjectURL(url);
@@ -90,8 +90,6 @@ export const CandidateDetailPage = () => {
     status: candidate.current_status || 'Applied',
     currentCtc: candidate.current_ctc,
     expectedCtc: candidate.expected_ctc,
-    summary: candidate.summary,
-    rejectionReason: candidate.rejectionReason,
     maskedResumeText: candidate.masked_resume_text,
     availability: candidate.availability,
     lastCompany: candidate.last_company,
