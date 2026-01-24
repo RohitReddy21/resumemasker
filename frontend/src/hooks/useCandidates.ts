@@ -114,18 +114,31 @@ export const useCandidates = (jobId?: string) => {
       console.log('Fetching fresh candidates data...');
       const data = await candidateService.getAll(jobId);
       console.log(`Received ${data.length} candidates from backend`);
+      
+      // Map backend response (snake_case) to frontend interface (camelCase)
       return data.map((c: any) => ({
         ...c,
-        // CRITICAL FIX: Use the _id field (MongoDB ObjectId) as the primary identifier
-        // Backend now consistently returns the same value for both _id and id fields
-        id: c._id || c.id
+        // Backend returns 'id' as the primary identifier (UUID or ObjectId string)
+        id: c.id || c._id,
+        // Ensure all snake_case fields are available
+        job_id: c.job_id || c.jobId,
+        current_status: c.current_status || c.currentStatus || 'Applied',
+        current_ctc: c.current_ctc || c.currentCtc,
+        expected_ctc: c.expected_ctc || c.expectedCtc,
+        match_score: c.match_score || c.matchScore || 0,
+        status_history: c.status_history || c.statusHistory || [],
+        created_at: c.created_at || c.createdAt,
+        social_links: c.social_links || c.socialLinks || [],
+        last_company: c.last_company || c.lastCompany,
+        masked_resume_text: c.masked_resume_text,
+        masked_name: c.masked_name,
       })) as Candidate[];
     },
-    // Force fresh data - disable cache temporarily
-    staleTime: 0,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-    retry: 1,
+    // Don't disable caching - let React Query handle it
+    staleTime: 30000, // 30 seconds
+    gcTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
+    retry: 2,
   });
 };
 

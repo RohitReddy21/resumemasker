@@ -162,20 +162,35 @@ async def get_candidates(jobId: Optional[str] = None):
     try:
         print(f"Getting candidates for jobId: {jobId}")
         query = {"job_id": jobId} if jobId else {}
-        candidates = await db.candidates.find(query).to_list(1000)
         
-        print(f"Found {len(candidates)} candidates")
+        # First, show what's actually in the database
+        total_in_db = await db.candidates.count_documents({})
+        print(f"📊 Total candidates in database: {total_in_db}")
+        
+        candidates = await db.candidates.find(query).to_list(1000)
+        print(f"📋 Found {len(candidates)} candidates matching query: {query}")
         
         for c in candidates:
-            # Use the stored UUID id field, not MongoDB _id
-            # This ensures consistent ID format across all endpoints
-            if "id" not in c or not c["id"]:
-                # Fallback: if id is missing, use _id string
-                c["id"] = str(c.get("_id"))
+            # Ensure both id and _id are present for compatibility
+            mongo_id = str(c.get("_id"))
+            stored_id = c.get("id")
             
+            # Use stored UUID if available, otherwise use MongoDB ObjectId
+            if stored_id:
+                c["id"] = stored_id
+            else:
+                c["id"] = mongo_id
+                print(f"⚠️  Candidate missing 'id' field, using _id: {mongo_id}")
+            
+            # Always include _id as string for compatibility
+            c["_id"] = mongo_id
+            
+        print(f"✅ Returning {len(candidates)} candidates")
         return candidates
     except Exception as e:
-        print(f"Get candidates error: {str(e)}")
+        print(f"❌ Get candidates error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to get candidates: {str(e)}")
 
 @app.post("/candidates", response_model=Candidate)
