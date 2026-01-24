@@ -1,8 +1,9 @@
 import axios from 'axios';
 
 // Configure base URL for your FastAPI backend
-// Update this to your actual backend URL when deploying
-const API_BASE_URL = 'http://localhost:8001';
+// Use environment variable or fallback based on environment
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+  (import.meta.env.DEV ? 'http://localhost:8001' : 'https://resumemasker-1.onrender.com');
 
 const api = axios.create({
   baseURL: API_BASE_URL,
