@@ -210,7 +210,8 @@ export function CandidatePipeline({ candidates, jobs, onStatusChange }: Candidat
     const matchesSearch =
       candidate.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       candidate.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      candidate.candidateId.toLowerCase().includes(searchQuery.toLowerCase());
+      // Search by id field, not candidateId (which is derived from id)
+      candidate.id.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || candidate.currentStatus === statusFilter;
     const matchesJob = jobFilter === 'all' || candidate.jobId === jobFilter;
     return matchesSearch && matchesStatus && matchesJob;

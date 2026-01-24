@@ -27,7 +27,9 @@ export const CandidateDetailPage = () => {
     
     try {
       setIsDownloading(true);
-      const response = await fetch(`/api/candidates/${candidateId}/download-masked-resume`);
+      // Use the actual candidate.id from the API response
+      const actualId = candidate?.id || candidateId;
+      const response = await fetch(`/api/candidates/${actualId}/download-masked-resume`);
       
       if (!response.ok) {
         throw new Error('Failed to download resume');
@@ -37,7 +39,8 @@ export const CandidateDetailPage = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `Candidate_${(candidate as any)?.candidate_id || 'Unknown'}_Resume.pdf`;
+      // Use candidate_id (the numeric ID assigned for masking) if available, else use id
+      link.download = `Candidate_${(candidate as any)?.candidate_id || candidateId}_Resume.pdf`;
       document.body.appendChild(link);
       link.click();
       window.URL.revokeObjectURL(url);
