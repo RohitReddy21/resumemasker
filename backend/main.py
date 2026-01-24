@@ -16,7 +16,12 @@ app = FastAPI(title="Recruitment Board API")
 # CORS setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Update this with your frontend URL after deployment
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "https://resumemasker.vercel.app",
+        "*"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -88,6 +93,21 @@ class Candidate(BaseModel):
     masked_resume_text: Optional[str] = None
 
 # Routes
+
+# Health check endpoint
+@app.get("/")
+async def health_check():
+    return {"status": "ok", "message": "Recruitment Board API is running"}
+
+@app.get("/health")
+async def health():
+    try:
+        # Check database connection
+        await db.command("ping")
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        return {"status": "unhealthy", "database": "disconnected", "error": str(e)}
+
 @app.get("/jobs", response_model=List[Job])
 async def get_jobs():
     jobs = await db.jobs.find().to_list(1000)
