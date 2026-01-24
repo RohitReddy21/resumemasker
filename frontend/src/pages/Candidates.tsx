@@ -25,11 +25,27 @@ const Candidates = () => {
     };
 
     const handleCandidateStatusChange = async (candidateId: string, status: CandidateStatus) => {
+        // ✅ HARD GUARD: Cannot update without _id
+        if (!candidateId || candidateId.trim() === '') {
+            toast({
+                title: 'Error',
+                description: '❌ Candidate must be saved before editing. Please save first.',
+                variant: 'destructive'
+            });
+            return;
+        }
+
         try {
+            console.log(`🔄 Updating status for candidate ${candidateId} to ${status}`);
             await updateCandidate.mutateAsync({ id: candidateId, updates: { current_status: status } });
-            toast({ title: 'Candidate moved', description: `Status changed to ${status}` });
+            toast({ title: 'Candidate moved', description: `✅ Status changed to ${status}` });
         } catch (error) {
-            toast({ title: 'Error', description: 'Failed to update candidate status', variant: 'destructive' });
+            console.error('Status update failed:', error);
+            toast({
+                title: 'Error',
+                description: `❌ Failed to update candidate. Make sure it was saved first.`,
+                variant: 'destructive'
+            });
         }
     };
 

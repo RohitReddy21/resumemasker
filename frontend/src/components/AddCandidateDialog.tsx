@@ -109,7 +109,13 @@ export const AddCandidateDialog = ({ open, onOpenChange, jobs }: AddCandidateDia
 
   const handleSaveAll = async () => {
     const unsaved = processedCandidates.filter(c => !c.saved && !c.error);
-    if (unsaved.length === 0) return;
+    if (unsaved.length === 0) {
+      toast({
+        title: "No candidates to save",
+        description: "All candidates are already saved or have errors.",
+      });
+      return;
+    }
 
     let successCount = 0;
     for (let i = 0; i < processedCandidates.length; i++) {
@@ -117,10 +123,14 @@ export const AddCandidateDialog = ({ open, onOpenChange, jobs }: AddCandidateDia
       if (c.saved || c.error) continue;
 
       try {
-        if (c.existingId) {
-            // Update existing candidate (already created by backend analysis)
+        // ✅ CORE RULE: You cannot UPDATE without first CREATING
+        // Check if candidate is already saved (has _id from previous save)
+        if (c._id) {
+            console.log(`♻️ UPDATING existing saved candidate: ${c.name} with _id: ${c._id}`);
+            
+            // This candidate was already created and saved, now update it
             await updateCandidate.mutateAsync({
-                id: c.existingId,
+                id: c._id,  // ← Use saved _id, not random ID
                 updates: {
                     name: c.name,
                     email: c.email,
@@ -142,8 +152,9 @@ export const AddCandidateDialog = ({ open, onOpenChange, jobs }: AddCandidateDia
                 }
             });
         } else {
-            // Create new candidate - MUST SAVE FIRST before any updates
-            console.log('📝 Creating new candidate:', c.name);
+            // ✅ NEW CANDIDATE: Must CREATE in database first
+            console.log(`📝 CREATING new candidate: ${c.name}`);
+            
             const createdCandidate = await createCandidate.mutateAsync({
                 name: c.name,
                 email: c.email,
@@ -166,13 +177,19 @@ export const AddCandidateDialog = ({ open, onOpenChange, jobs }: AddCandidateDia
                 masked_name: c.maskedName,
             });
             
-            // CRITICAL: Store the returned ID for future updates
-            if (createdCandidate && (createdCandidate._id || createdCandidate.id)) {
-                console.log('✅ Candidate saved with ID:', createdCandidate._id || createdCandidate.id);
-                console.log('📌 This ID can now be used for updates');
-            } else {
-                throw new Error('❌ Candidate created but no ID returned');
+            // ✅ CRITICAL: Capture the _id returned from POST
+            const savedId = createdCandidate._id || createdCandidate.id;
+            if (!savedId) {
+                throw new Error('❌ Database error: Candidate created but no _id returned');
             }
+            
+            console.log(`✅ SUCCESS: Candidate saved with _id: ${savedId}`);
+            console.log('🔓 Now editable via PATCH /candidates/:_id');
+            
+            // Store the _id in the candidate object for future updates
+            const updated = [...processedCandidates];
+            updated[i]._id = savedId;
+            setProcessedCandidates([...updated]);
         }
 
         const updated = [...processedCandidates];
@@ -180,13 +197,18 @@ export const AddCandidateDialog = ({ open, onOpenChange, jobs }: AddCandidateDia
         setProcessedCandidates([...updated]);
         successCount++;
       } catch (err) {
-        console.error(`Failed to save ${c.name}:`, err);
+        console.error(`❌ Failed to save ${c.name}:`, err);
+        toast({
+          title: "Error saving candidate",
+          description: `${c.name}: ${(err as Error).message}`,
+          variant: "destructive"
+        });
       }
     }
 
     toast({
       title: "Bulk Save Complete",
-      description: `Successfully added ${successCount} candidates.`,
+      description: `Successfully saved ${successCount} candidates.`,
     });
 
     if (processedCandidates.every(c => c.saved || c.error)) {
