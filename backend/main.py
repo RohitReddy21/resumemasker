@@ -745,26 +745,51 @@ async def debug_candidate(candidate_id: str):
 
 @app.get("/debug/stats")
 async def debug_stats():
-    """Debug endpoint to show database statistics"""
+    """Debug endpoint to show database statistics and connection info"""
     try:
-        count = await db.candidates.count_documents({})
+        # Get collection stats
+        candidate_count = await db.candidates.count_documents({})
+        job_count = await db.jobs.count_documents({})
+        
+        # Get sample candidate to check structure
+        sample_candidate = await db.candidates.find_one({})
+        sample_data = None
+        if sample_candidate:
+            sample_candidate["_id"] = str(sample_candidate.get("_id"))
+            sample_data = sample_candidate
         
         # Get MongoDB URI without password
         mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
         masked_uri = mongo_uri.split("@")[-1] if "@" in mongo_uri else mongo_uri
         
+        # Test database connection
+        ping_result = None
+        try:
+            await db.command("ping")
+            ping_result = "✅ Connected"
+        except Exception as e:
+            ping_result = f"❌ Failed: {str(e)}"
+        
         return {
-            "total_candidates": count,
+            "database_connection": ping_result,
+            "total_candidates": candidate_count,
+            "total_jobs": job_count,
             "mongodb_url": f"mongodb://...@{masked_uri}",
             "environment": os.getenv("ENV", "production"),
+            "sample_candidate": sample_data,
             "debug_endpoints": [
-                "/debug/stats",
-                "/debug/candidates/{id}",
-                "/health"
-            ]
+                "GET /debug/stats (this endpoint)",
+                "GET /debug/candidates/{id}",
+                "GET /health"
+            ],
+            "instructions": "If total_candidates is 0, the production database is empty. You need to create candidates via POST /candidates"
         }
     except Exception as e:
-        return {"error": str(e), "message": "Database connection failed"}
+        return {
+            "error": str(e),
+            "message": "Failed to connect to database",
+            "help": "Check MONGODB_URI environment variable on Render"
+        }
 
 if __name__ == "__main__":
     import uvicorn
