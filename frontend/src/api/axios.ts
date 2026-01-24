@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Configure base URL for your FastAPI backend
 // Update this to your actual backend URL when deploying
-const API_BASE_URL = 'https://resumemasker-1.onrender.com';
+const API_BASE_URL = 'http://localhost:8001';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
