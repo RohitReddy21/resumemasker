@@ -211,8 +211,30 @@ async def create_candidate(candidate: Candidate):
 async def get_candidate(candidate_id: str):
     try:
         print(f"Getting candidate with ID: {candidate_id}")
-        # Query by the stored id field (UUID)
+        # Try multiple query strategies to find the candidate
+        # Strategy 1: Query by the stored id field (UUID)
         candidate = await db.candidates.find_one({"id": candidate_id})
+        
+        # Strategy 2: If not found, try as MongoDB ObjectId
+        if not candidate:
+            from bson import ObjectId
+            try:
+                object_id = ObjectId(candidate_id)
+                candidate = await db.candidates.find_one({"_id": object_id})
+                print(f"Found candidate by ObjectId: {candidate_id}")
+            except:
+                pass
+        
+        # Strategy 3: Try both id and _id fields
+        if not candidate:
+            from bson import ObjectId
+            try:
+                object_id = ObjectId(candidate_id)
+                query = {"$or": [{"id": candidate_id}, {"_id": object_id}]}
+            except:
+                query = {"$or": [{"id": candidate_id}, {"_id": candidate_id}]}
+            candidate = await db.candidates.find_one(query)
+        
         if not candidate:
             print(f"Candidate with ID {candidate_id} not found")
             raise HTTPException(status_code=404, detail="Candidate not found")
@@ -234,8 +256,16 @@ async def update_candidate_status(candidate_id: str, status_update: dict = Body(
     if not status:
         raise HTTPException(status_code=400, detail="Status is required")
     
+    # Build query that tries multiple strategies
+    from bson import ObjectId
+    try:
+        object_id = ObjectId(candidate_id)
+        query = {"$or": [{"id": candidate_id}, {"_id": object_id}]}
+    except:
+        query = {"$or": [{"id": candidate_id}, {"_id": candidate_id}]}
+    
     result = await db.candidates.update_one(
-        {"id": candidate_id},
+        query,
         {
             "$set": {"current_status": status},
             "$push": {"status_history": {"status": status, "changedAt": datetime.utcnow()}}
@@ -258,17 +288,41 @@ async def update_candidate(candidate_id: str, updates: dict = Body(...)):
         if not allowed_updates:
             raise HTTPException(status_code=400, detail="No valid fields to update")
         
-        # Query by stored id field (UUID)
+        # Try multiple query strategies to find the candidate
+        # Strategy 1: Query by stored id field (UUID)
         query = {"id": candidate_id}
-        
         existing_candidate = await db.candidates.find_one(query)
-        print(f"🔍 PATCH: Querying by id: {candidate_id}")
+        print(f"🔍 PATCH: Strategy 1 - Querying by id field: {candidate_id}")
+        
+        # Strategy 2: If not found, try as MongoDB ObjectId
+        if not existing_candidate:
+            from bson import ObjectId
+            try:
+                object_id = ObjectId(candidate_id)
+                query = {"_id": object_id}
+                existing_candidate = await db.candidates.find_one(query)
+                print(f"🔍 PATCH: Strategy 2 - Querying by ObjectId: {candidate_id}")
+            except:
+                print(f"🔍 PATCH: Strategy 2 failed - not a valid ObjectId")
+                pass
+        
+        # Strategy 3: Try as both id and _id in $or query
+        if not existing_candidate:
+            from bson import ObjectId
+            try:
+                object_id = ObjectId(candidate_id)
+                query = {"$or": [{"id": candidate_id}, {"_id": object_id}]}
+            except:
+                query = {"$or": [{"id": candidate_id}, {"_id": candidate_id}]}
+            existing_candidate = await db.candidates.find_one(query)
+            print(f"🔍 PATCH: Strategy 3 - Querying by $or: {candidate_id}")
+        
         print(f"🔍 PATCH: Existing candidate found: {existing_candidate is not None}")
         if existing_candidate:
             print(f"🔍 PATCH: Candidate name: {existing_candidate.get('name')}")
         
         if not existing_candidate:
-            print(f"❌ PATCH: Candidate with ID {candidate_id} not found")
+            print(f"❌ PATCH: Candidate with ID {candidate_id} not found after all strategies")
             raise HTTPException(status_code=404, detail=f"Candidate not found: {candidate_id}")
         
         # Add timestamp to status history if status is being updated
