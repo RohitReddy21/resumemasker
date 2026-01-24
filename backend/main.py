@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Body, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 from typing import List, Optional
@@ -8,6 +9,7 @@ import uuid
 import os
 from io import BytesIO
 from resume_parser import analyze_resume, mask_resume_text
+from resume_pdf_generator import create_masked_resume_pdf
 from PyPDF2 import PdfReader
 from docx import Document
 
@@ -627,6 +629,46 @@ async def upload_resume(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error processing resume: {str(e)}")
+
+
+# ===================== DOWNLOAD MASKED RESUME =====================
+@app.get("/candidates/{candidate_id}/download-masked-resume")
+async def download_masked_resume(candidate_id: str):
+    """
+    Download the masked resume of a candidate as a professional PDF.
+    """
+    try:
+        # Get candidate from database
+        candidate = await db.candidates.find_one({"_id": candidate_id})
+        
+        if not candidate:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        
+        # Check if masked resume text exists
+        masked_text = candidate.get("masked_resume_text")
+        if not masked_text:
+            raise HTTPException(status_code=400, detail="Masked resume not available for this candidate")
+        
+        # Generate PDF
+        pdf_buffer = create_masked_resume_pdf(
+            masked_text=masked_text,
+            candidate_id=candidate.get("candidate_id", 0)
+        )
+        
+        # Return PDF as file download
+        return FileResponse(
+            iter([pdf_buffer.getvalue()]),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=Candidate_{candidate.get('candidate_id', 'Unknown')}_Resume.pdf"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error generating PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error generating PDF: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

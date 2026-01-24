@@ -8,7 +8,7 @@ import { Progress } from '@/components/ui/progress';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
   Mail, Phone, MapPin, Briefcase, GraduationCap, Award, TrendingUp, 
-  Users, Calendar, ArrowLeft, Eye, EyeOff, Download, Edit, Share2
+  Users, Calendar, ArrowLeft, Eye, EyeOff, Download, Edit, Share2, Loader2
 } from 'lucide-react';
 import { useCandidate } from '@/hooks/useCandidates';
 import { CandidateProfileCard } from './CandidateProfileCard';
@@ -20,6 +20,35 @@ export const CandidateDetailPage = () => {
   const { data: candidate, isLoading, error } = useCandidate(candidateId || '');
   const [showMaskedInfo, setShowMaskedInfo] = useState(false);
   const [viewMode, setViewMode] = useState<'profile' | 'raw'>('profile');
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownloadMaskedResume = async () => {
+    if (!candidateId) return;
+    
+    try {
+      setIsDownloading(true);
+      const response = await fetch(`/api/candidates/${candidateId}/download-masked-resume`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to download resume');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Candidate_${candidate?.candidate_id || 'Unknown'}_Resume.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error downloading resume:', error);
+      alert('Failed to download resume. Please try again.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -134,9 +163,18 @@ export const CandidateDetailPage = () => {
                 <Share2 className="h-4 w-4 mr-2" />
                 Share
               </Button>
-              <Button variant="outline" size="sm">
-                <Download className="h-4 w-4 mr-2" />
-                Export
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleDownloadMaskedResume}
+                disabled={isDownloading}
+              >
+                {isDownloading ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
+                {isDownloading ? 'Downloading...' : 'Download PDF'}
               </Button>
             </div>
           </div>
