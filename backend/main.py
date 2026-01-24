@@ -167,11 +167,11 @@ async def get_candidates(jobId: Optional[str] = None):
         print(f"Found {len(candidates)} candidates")
         
         for c in candidates:
-            # CRITICAL FIX: Use MongoDB _id as the primary identifier
-            # Convert ObjectId to string and use as both _id and id
-            object_id_str = str(c.get("_id"))
-            c["_id"] = object_id_str
-            c["id"] = object_id_str  # Use same value for both fields
+            # Use the stored UUID id field, not MongoDB _id
+            # This ensures consistent ID format across all endpoints
+            if "id" not in c or not c["id"]:
+                # Fallback: if id is missing, use _id string
+                c["id"] = str(c.get("_id"))
             
         return candidates
     except Exception as e:
@@ -211,21 +211,14 @@ async def create_candidate(candidate: Candidate):
 async def get_candidate(candidate_id: str):
     try:
         print(f"Getting candidate with ID: {candidate_id}")
-        # CRITICAL FIX: Query by both _id and id fields
-        candidate = await db.candidates.find_one({
-            "$or": [
-                {"_id": candidate_id},
-                {"id": candidate_id}
-            ]
-        })
+        # Query by the stored id field (UUID)
+        candidate = await db.candidates.find_one({"id": candidate_id})
         if not candidate:
             print(f"Candidate with ID {candidate_id} not found")
             raise HTTPException(status_code=404, detail="Candidate not found")
         
-        # CRITICAL FIX: Use consistent ID for both fields
-        object_id_str = str(candidate.get("_id"))
-        candidate["_id"] = object_id_str
-        candidate["id"] = object_id_str
+        # Return with consistent id field
+        candidate["id"] = candidate.get("id", str(candidate.get("_id")))
             
         print(f"Returning candidate: {candidate.get('name', 'Unknown')} with ID: {candidate.get('id')}")
         return candidate
@@ -265,31 +258,18 @@ async def update_candidate(candidate_id: str, updates: dict = Body(...)):
         if not allowed_updates:
             raise HTTPException(status_code=400, detail="No valid fields to update")
         
-        # CRITICAL DEBUG: Check what exists in database
-        # Convert string ID to ObjectId if it looks like an ObjectId
-        from bson import ObjectId
-        try:
-            object_id = ObjectId(candidate_id)
-            query = {"_id": object_id}
-        except:
-            # If not a valid ObjectId, use as string
-            query = {
-                "$or": [
-                    {"_id": candidate_id},
-                    {"id": candidate_id}
-                ]
-            }
+        # Query by stored id field (UUID)
+        query = {"id": candidate_id}
         
         existing_candidate = await db.candidates.find_one(query)
-        print(f"🔍 PATCH: Query used: {query}")
+        print(f"🔍 PATCH: Querying by id: {candidate_id}")
         print(f"🔍 PATCH: Existing candidate found: {existing_candidate is not None}")
         if existing_candidate:
-            print(f"🔍 PATCH: Existing _id: {existing_candidate.get('_id')}")
-            print(f"🔍 PATCH: Existing id: {existing_candidate.get('id')}")
+            print(f"🔍 PATCH: Candidate name: {existing_candidate.get('name')}")
         
         if not existing_candidate:
             print(f"❌ PATCH: Candidate with ID {candidate_id} not found")
-            raise HTTPException(status_code=404, detail="Candidate not found")
+            raise HTTPException(status_code=404, detail=f"Candidate not found: {candidate_id}")
         
         # Add timestamp to status history if status is being updated
         if 'current_status' in allowed_updates:
@@ -309,15 +289,12 @@ async def update_candidate(candidate_id: str, updates: dict = Body(...)):
         
         if result.modified_count == 0:
             print(f"❌ PATCH: No documents modified for ID {candidate_id}")
-            raise HTTPException(status_code=404, detail="Candidate not found")
+            raise HTTPException(status_code=404, detail=f"Candidate not found: {candidate_id}")
         
-        # Return updated candidate with proper ID conversion
+        # Return updated candidate with consistent id field
         updated_candidate = await db.candidates.find_one(query)
         if updated_candidate:
-            # CRITICAL FIX: Use consistent ID for both fields
-            object_id_str = str(updated_candidate.get("_id"))
-            updated_candidate["_id"] = object_id_str
-            updated_candidate["id"] = object_id_str
+            updated_candidate["id"] = updated_candidate.get("id", str(updated_candidate.get("_id")))
         
         print(f"✅ PATCH: Returning updated candidate: {updated_candidate.get('name', 'Unknown')} with ID: {updated_candidate.get('id')}")
         return updated_candidate
@@ -669,6 +646,71 @@ async def download_masked_resume(candidate_id: str):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error generating PDF: {str(e)}")
+
+@app.get("/debug/candidates/{candidate_id}")
+async def debug_candidate(candidate_id: str):
+    """Debug endpoint to see raw candidate data"""
+    try:
+        # Try querying by id field
+        by_id = await db.candidates.find_one({"id": candidate_id})
+        
+        # Try querying by MongoDB _id
+        from bson import ObjectId
+        by_mongo_id = None
+        try:
+            by_mongo_id = await db.candidates.find_one({"_id": ObjectId(candidate_id)})
+        except:
+            pass
+        
+        # Return all data for debugging
+        result = {
+            "searched_id": candidate_id,
+            "found_by_id_field": bool(by_id),
+            "found_by_mongo_id": bool(by_mongo_id),
+            "data_by_id": None,
+            "data_by_mongo_id": None
+        }
+        
+        if by_id:
+            by_id["_id"] = str(by_id.get("_id"))
+            result["data_by_id"] = by_id
+        
+        if by_mongo_id:
+            by_mongo_id["_id"] = str(by_mongo_id.get("_id"))
+            result["data_by_mongo_id"] = by_mongo_id
+        
+        # Also list a few candidates to compare structure
+        all_candidates = await db.candidates.find().limit(3).to_list(3)
+        for c in all_candidates:
+            c["_id"] = str(c.get("_id"))
+        result["sample_candidates"] = all_candidates
+        
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/debug/stats")
+async def debug_stats():
+    """Debug endpoint to show database statistics"""
+    try:
+        count = await db.candidates.count_documents({})
+        
+        # Get MongoDB URI without password
+        mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+        masked_uri = mongo_uri.split("@")[-1] if "@" in mongo_uri else mongo_uri
+        
+        return {
+            "total_candidates": count,
+            "mongodb_url": f"mongodb://...@{masked_uri}",
+            "environment": os.getenv("ENV", "production"),
+            "debug_endpoints": [
+                "/debug/stats",
+                "/debug/candidates/{id}",
+                "/health"
+            ]
+        }
+    except Exception as e:
+        return {"error": str(e), "message": "Database connection failed"}
 
 if __name__ == "__main__":
     import uvicorn
